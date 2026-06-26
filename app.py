@@ -18,7 +18,7 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     try:
-        # AQUÍ ESTÁ LA CORRECCIÓN: dtype=str evita el error con los números largos del SRI
+        # Lectura segura: dtype=str evita el error con los números largos del SRI
         df = pd.read_csv(uploaded_file, sep='\t', encoding='latin1', dtype=str)
         
         # Limpiar espacios vacíos en los nombres de las columnas
