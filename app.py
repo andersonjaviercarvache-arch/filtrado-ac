@@ -8,9 +8,9 @@ st.set_page_config(
 )
 
 st.title("Sistema de Ingeniería de Costos y Control Financiero")
-st.subheader("Filtrado y Control de Facturas del SRI")
+st.subheader("Búsqueda Inteligente de Comprobantes del SRI")
 
-# 1. Selector de archivos
+# Selector de archivos
 uploaded_file = st.file_uploader(
     "Carga tu archivo de texto (.txt) descargado del SRI", 
     type=["txt", "csv"]
@@ -18,42 +18,32 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     try:
-        # Los reportes del SRI usan tabulaciones ('\t') como separador
-        # Usamos encoding='latin1' para evitar errores con tildes y eñes
+        # Lectura con tabulación y encoding para tildes/eñes
         df = pd.read_csv(uploaded_file, sep='\t', encoding='latin1')
         
-        # Limpiar espacios en blanco invisibles en los nombres de las columnas
+        # Limpiar espacios vacíos en los nombres de las columnas
         df.columns = df.columns.str.strip()
         
-        st.success("Archivo cargado y procesado con éxito.")
+        st.success("Archivo cargado correctamente.")
         
-        # 2. Identificar columnas clave automáticamente
-        # El SRI suele usar 'RAZÓN SOCIAL EMISOR' o 'RAZON SOCIAL EMISOR'
-        col_emisor = None
-        for col in ['RAZÓN SOCIAL EMISOR', 'RAZON SOCIAL EMISOR', 'EMISOR', 'NOMBRE EMISOR']:
-            if col in df.columns:
-                col_emisor = col
-                break
-        
-        # Si las columnas cambian, permitimos que el usuario la seleccione manualmente
-        if col_emisor is None:
-            col_emisor = st.selectbox(
-                "No se detectó la columna automática. Selecciona la columna del Emisor/Proveedor:", 
-                df.columns
-            )
-            
-        # 3. Campo de búsqueda/filtrado por nombre
+        # Campo de búsqueda universal
         st.markdown("---")
-        busqueda = st.text_input("🔍 Ingresa el nombre del proveedor o empresa para filtrar:")
+        busqueda = st.text_input("🔍 Digita cualquier coincidencia (Nombre, RUC, Nº Factura, Fecha, etc.):")
         
-        # 4. Aplicar el filtro si hay texto ingresado
         if busqueda:
-            # Filtramos convirtiendo a texto, ignorando mayúsculas/minúsculas (.str.contains)
-            df_filtrado = df[df[col_emisor].astype(str).str.contains(busqueda, case=False, na=False)].copy()
+            # EXPLICACIÓN DEL CAMBIO:
+            # 1. df.astype(str) convierte temporalmente todos los datos a texto.
+            # 2. .str.contains busca la palabra ignorando mayúsculas/minúsculas.
+            # 3. .any(axis=1) verifica si la palabra está en AL MENOS una columna de la fila.
+            mascara_global = df.astype(str).apply(
+                lambda x: x.str.contains(busqueda, case=False, na=False)
+            ).any(axis=1)
             
-            st.write(f"### Resultados para: '{busqueda}' ({len(df_filtrado)} registros encontrados)")
+            df_filtrado = df[mascara_global].copy()
             
-            # Intentar buscar la columna de dinero para sumarizar de forma segura
+            st.write(f"### Facturas encontradas para: '{busqueda}' ({len(df_filtrado)} registros)")
+            
+            # Buscar columna de dinero para actualizar el totalizador dinámicamente
             col_monto = None
             for col in ['VALOR TOTAL', 'TOTAL', 'MONTO', 'IMPORTE TOTAL']:
                 if col in df_filtrado.columns:
@@ -61,22 +51,20 @@ if uploaded_file is not None:
                     break
             
             if col_monto:
-                # Limpieza de la columna Monto por seguridad (manejo de strings o comas decimales)
+                # Conversión segura a decimales
                 df_filtrado[col_monto] = df_filtrado[col_monto].astype(str).str.replace(',', '.')
                 df_filtrado[col_monto] = pd.to_numeric(df_filtrado[col_monto], errors='coerce')
                 
-                # Calcular el total acumulado de las facturas filtradas
                 total_monto = df_filtrado[col_monto].sum()
-                st.metric(label="Monto Total Filtrado", value=f"${total_monto:,.2f}")
+                st.metric(label="Suma Total de Coincidencias", value=f"${total_monto:,.2f}")
             
-            # Mostrar la tabla filtrada
+            # Desplegar la tabla con las filas que coincidieron
             st.dataframe(df_filtrado, use_container_width=True)
             
         else:
-            # Si no hay búsqueda, mostrar todo el documento original
+            # Vista general por defecto si el buscador está vacío
             st.write(f"### Vista general del documento ({len(df)} registros en total)")
             st.dataframe(df, use_container_width=True)
             
     except Exception as e:
-        st.error(f"Ocurrió un error al procesar el archivo: {e}")
-        st.info("Asegúrate de que el archivo sea el documento plano (.txt) obtenido directamente de las consultas del SRI.")
+        st.error(f"Error al procesar el archivo: {e}")
