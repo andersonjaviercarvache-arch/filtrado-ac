@@ -18,8 +18,8 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     try:
-        # Lectura con tabulación y encoding para tildes/eñes
-        df = pd.read_csv(uploaded_file, sep='\t', encoding='latin1')
+        # AQUÍ ESTÁ LA CORRECCIÓN: dtype=str evita el error con los números largos del SRI
+        df = pd.read_csv(uploaded_file, sep='\t', encoding='latin1', dtype=str)
         
         # Limpiar espacios vacíos en los nombres de las columnas
         df.columns = df.columns.str.strip()
@@ -31,10 +31,7 @@ if uploaded_file is not None:
         busqueda = st.text_input("🔍 Digita cualquier coincidencia (Nombre, RUC, Nº Factura, Fecha, etc.):")
         
         if busqueda:
-            # EXPLICACIÓN DEL CAMBIO:
-            # 1. df.astype(str) convierte temporalmente todos los datos a texto.
-            # 2. .str.contains busca la palabra ignorando mayúsculas/minúsculas.
-            # 3. .any(axis=1) verifica si la palabra está en AL MENOS una columna de la fila.
+            # Filtro global en todas las columnas
             mascara_global = df.astype(str).apply(
                 lambda x: x.str.contains(busqueda, case=False, na=False)
             ).any(axis=1)
@@ -51,7 +48,7 @@ if uploaded_file is not None:
                     break
             
             if col_monto:
-                # Conversión segura a decimales
+                # Conversión segura a decimales para poder sumar los valores
                 df_filtrado[col_monto] = df_filtrado[col_monto].astype(str).str.replace(',', '.')
                 df_filtrado[col_monto] = pd.to_numeric(df_filtrado[col_monto], errors='coerce')
                 
